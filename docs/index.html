@@ -134,26 +134,32 @@
       background: var(--border);
     }
 
-    /* Tier Quick Select */
+    /* AKQUINET Package Select */
     .tier-select {
       display: flex;
-      gap: 6px;
-      margin-bottom: 16px;
+      gap: 8px;
+      margin-bottom: 20px;
       align-items: center;
       flex-wrap: wrap;
+      background: var(--primary-light);
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(196, 70, 126, 0.15);
     }
     .tier-select span {
-      font-size: 13px;
-      color: var(--muted);
-      margin-right: 4px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin-right: 8px;
     }
     .tier-btn {
-      padding: 5px 14px;
-      border: 1px solid var(--border);
-      border-radius: 16px;
+      padding: 7px 20px;
+      border: 2px solid var(--border);
+      border-radius: 20px;
       background: var(--surface);
       cursor: pointer;
-      font-size: 13px;
+      font-size: 14px;
+      font-weight: 500;
       color: var(--text);
       transition: all 0.2s;
     }
@@ -673,8 +679,8 @@
                   :checked="selectedIds.has(item.id)"
                   @click.stop="toggleItem(item.id)"
                 >
-                <span class="scope-id">{{ item.id }}</span>
                 <span class="scope-name">{{ item.nameEN }}</span>
+                <span class="scope-id">{{ item.id }}</span>
                 <span class="scope-md">{{ item.mandays != null ? item.mandays + ' MD' : 'TBD' }}</span>
                 <button
                   class="scope-expand"
