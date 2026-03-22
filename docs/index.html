@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAP Treasury Configurator | akquinet</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    :root {
+      --text: #5A5A5A;
+      --text-dark: #3A3A3A;
+      --primary: #C4467E;
+      --primary-hover: #A33868;
+      --primary-light: #F8E8F0;
+      --bg: #F7F5F8;
+      --surface: #FFFFFF;
+      --border: #E0DCE4;
+      --muted: #888888;
+      --success: #4CAF50;
+      --warning-bg: #FFF8E1;
+      --warning-border: #FFD54F;
+      --area-cash: #2E8B8B;
+      --area-debt: #3B5998;
+      --area-risk: #7B4FA0;
+      --area-payments: #D4892E;
+      --radius: 8px;
+      --shadow: 0 2px 8px rgba(0,0,0,0.08);
+      --font: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* Loading Screen */
+    .loading-screen {
+      position: fixed; inset: 0;
+      background: var(--surface);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.4s;
+    }
+    .loading-screen.fade-out { opacity: 0; pointer-events: none; }
+    .loading-screen img { height: 48px; margin-bottom: 24px; }
+    .loading-spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-error {
+      color: #D32F2F;
+      text-align: center;
+      max-width: 500px;
+      padding: 16px;
+    }
+
+    /* Header */
+    .header {
+      background: var(--surface);
+      border-bottom: 2px solid var(--primary);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+    .header img { height: 40px; }
+    .header-text h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-dark);
+    }
+    .header-text p {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* Main Layout */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 24px;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Solution Area Tabs */
+    .area-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .area-tab {
+      padding: 10px 18px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }
+    .area-tab:hover { border-color: var(--muted); }
+    .area-tab.active { color: #fff; border-color: transparent; }
+    .area-tab .badge {
+      background: rgba(255,255,255,0.3);
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .area-tab:not(.active) .badge {
+      background: var(--border);
+    }
+
+    /* Tier Quick Select */
+    .tier-select {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .tier-select span {
+      font-size: 13px;
+      color: var(--muted);
+      margin-right: 4px;
+    }
+    .tier-btn {
+      padding: 5px 14px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text);
+      transition: all 0.2s;
+    }
+    .tier-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .tier-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    /* Package Card */
+    .package-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .package-header {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .package-header:hover { background: #FAFAFA; }
+    .package-header .pkg-checkbox {
+      flex-shrink: 0;
+    }
+    .package-name {
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text-dark);
+      flex: 1;
+    }
+    .package-level {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 10px;
+      border-radius: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .level-basic { background: #E8F5E9; color: #2E7D32; }
+    .level-advanced { background: #E3F2FD; color: #1565C0; }
+    .level-optional { background: #FFF3E0; color: #E65100; }
+    .package-mandays {
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .package-chevron {
+      transition: transform 0.2s;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .package-chevron.open { transform: rotate(90deg); }
+
+    /* Scope Items List */
+    .scope-items { border-top: 1px solid var(--border); }
+    .scope-item {
+      border-bottom: 1px solid #F0EDF2;
+      transition: background 0.15s;
+    }
+    .scope-item:last-child { border-bottom: none; }
+    .scope-item.selected { background: var(--primary-light); }
+    .scope-item-row {
+      padding: 10px 16px 10px 44px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .scope-item-row:hover { background: rgba(0,0,0,0.02); }
+    .scope-item-row input[type="checkbox"] {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+    .scope-id {
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 12px;
+      font-weight: 600;
+      background: #EEEAF0;
+      color: var(--text-dark);
+      padding: 2px 8px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .scope-name {
+      flex: 1;
+      font-size: 14px;
+    }
+    .scope-md {
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .scope-expand {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 4px;
+      transition: transform 0.2s;
+      background: none;
+      border: none;
+    }
+    .scope-expand.open { transform: rotate(90deg); }
+
+    /* Scope Item Detail */
+    .scope-detail {
+      padding: 0 16px 12px 72px;
+      font-size: 13px;
+    }
+    .scope-description {
+      color: var(--text);
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+    .scope-notice {
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .scope-notice-label {
+      font-weight: 600;
+      color: #F57F17;
+      margin-bottom: 4px;
+    }
+    .scope-prereqs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .scope-prereqs span.label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .prereq-badge {
+      font-family: "Consolas", monospace;
+      font-size: 11px;
+      background: #E8E0EE;
+      color: var(--primary-hover);
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .prereq-badge:hover { background: var(--primary-light); }
+    .scope-software {
+      font-size: 12px;
+      color: var(--area-debt);
+      background: #EBF0F7;
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+    .scope-licenses {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .scope-licenses strong { color: var(--text); }
+
+    /* Fiori Apps */
+    .fiori-toggle {
+      font-size: 13px;
+      color: var(--primary);
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: var(--font);
+      padding: 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .fiori-toggle:hover { text-decoration: underline; }
+    .fiori-apps-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .fiori-apps-table th {
+      text-align: left;
+      padding: 6px 8px;
+      background: #F5F3F7;
+      font-weight: 600;
+      color: var(--text-dark);
+      border-bottom: 1px solid var(--border);
+    }
+    .fiori-apps-table td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #F0EDF2;
+      color: var(--text);
+    }
+
+    /* Summary Panel */
+    .summary-panel {
+      position: sticky;
+      top: 80px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+    }
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .summary-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+    }
+    .stat-box {
+      background: var(--surface);
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* License List */
+    .licenses-section {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .licenses-section h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin-bottom: 10px;
+    }
+    .license-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 13px;
+    }
+    .license-check {
+      color: var(--success);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    /* Selected Items */
+    .selected-items-section {
+      padding: 16px;
+    }
+    .selected-items-section h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin-bottom: 10px;
+    }
+    .selected-group {
+      margin-bottom: 12px;
+    }
+    .selected-group-header {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 0;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+    }
+    .selected-group-item {
+      font-size: 12px;
+      padding: 3px 0;
+      display: flex;
+      justify-content: space-between;
+      color: var(--text);
+    }
+    .selected-group-item .sid {
+      font-family: "Consolas", monospace;
+      color: var(--muted);
+      margin-right: 6px;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      transition: all 0.2s;
+      font-family: var(--font);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+      color: #fff;
+    }
+    .btn-danger {
+      color: #D32F2F;
+    }
+    .btn-danger:hover { border-color: #D32F2F; }
+
+    /* Toast */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      background: var(--text-dark);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      animation: slideIn 0.3s ease;
+      max-width: 360px;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+      margin-top: 40px;
+    }
+    .footer img { height: 24px; margin-bottom: 8px; }
+
+    /* Checkbox styling */
+    .custom-check {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    /* Mobile */
+    @media (max-width: 1024px) {
+      .main {
+        grid-template-columns: 1fr;
+      }
+      .summary-panel {
+        position: static;
+        max-height: none;
+      }
+      .area-tabs { flex-wrap: wrap; }
+    }
+
+    @media (max-width: 640px) {
+      .header { padding: 10px 16px; }
+      .header-text h1 { font-size: 15px; }
+      .main { padding: 16px; }
+      .scope-item-row { padding-left: 20px; }
+      .scope-detail { padding-left: 36px; }
+    }
+
+    /* Print */
+    @media print {
+      .header, .area-tabs, .tier-select, .action-buttons,
+      .toast-container, .footer, .scope-expand, .fiori-toggle,
+      .package-chevron, .custom-check, .pkg-checkbox { display: none !important; }
+      .main { display: block; }
+      .summary-panel { position: static; page-break-after: always; }
+      .config-panel .scope-items { display: block !important; }
+      .scope-item.selected { background: #F5F0F7; }
+      .scope-item:not(.selected) { display: none; }
+      .package-card { box-shadow: none; border: 1px solid #ccc; }
+      body { background: #fff; }
+      @page { margin: 1.5cm; }
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+    .empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+  <!-- Loading Screen -->
+  <div id="loading" class="loading-screen">
+    <img src="assets/akquinet-logo.jpeg" alt="akquinet">
+    <div class="loading-spinner"></div>
+    <p style="margin-top:16px;color:var(--muted);font-size:14px">Loading configurator data...</p>
+  </div>
+
+  <div id="app" style="display:none">
+    <!-- Header -->
+    <header class="header">
+      <img src="assets/akquinet-logo.jpeg" alt="akquinet">
+      <div class="header-text">
+        <h1>SAP S/4HANA Cloud Public Edition &mdash; Treasury Configurator</h1>
+        <p>Configure your treasury implementation scope</p>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main">
+      <!-- Left: Configuration Panel -->
+      <div class="config-panel">
+        <!-- Solution Area Tabs -->
+        <div class="area-tabs">
+          <button
+            v-for="area in solutionAreas"
+            :key="area.name"
+            class="area-tab"
+            :class="{ active: activeArea === area.name }"
+            :style="activeArea === area.name
+              ? { background: area.color, borderColor: area.color }
+              : {}"
+            @click="activeArea = area.name"
+          >
+            {{ area.shortName }}
+            <span class="badge">{{ countSelectedInArea(area.name) }}</span>
+          </button>
+        </div>
+
+        <!-- Tier Quick Select -->
+        <div class="tier-select">
+          <span>Quick select:</span>
+          <button
+            v-for="tier in ['None', 'Basic', 'Advanced', 'All']"
+            :key="tier"
+            class="tier-btn"
+            :class="{ active: getActiveTier(activeArea) === tier }"
+            @click="selectTier(activeArea, tier)"
+          >{{ tier }}</button>
+        </div>
+
+        <!-- Package Cards -->
+        <div v-for="pkg in packagesForActiveArea" :key="pkg.name" class="package-card">
+          <div class="package-header" @click="togglePackageExpand(pkg.name)">
+            <input
+              type="checkbox"
+              class="custom-check pkg-checkbox"
+              :checked="isPackageFullySelected(pkg.name)"
+              :indeterminate.prop="isPackagePartiallySelected(pkg.name)"
+              @click.stop="togglePackage(pkg.name)"
+            >
+            <span class="package-name">{{ pkg.name }}</span>
+            <span class="package-level" :class="'level-' + pkg.level">{{ pkg.level }}</span>
+            <span class="package-mandays">{{ pkg.totalMandays }} MD</span>
+            <span class="package-chevron" :class="{ open: expandedPackages.has(pkg.name) }">&#9654;</span>
+          </div>
+
+          <div class="scope-items" v-show="expandedPackages.has(pkg.name)">
+            <div
+              v-for="item in pkg.items"
+              :key="item.id"
+              class="scope-item"
+              :class="{ selected: selectedIds.has(item.id) }"
+              :data-item-id="item.id"
+            >
+              <div class="scope-item-row" @click="toggleItem(item.id)">
+                <input
+                  type="checkbox"
+                  :checked="selectedIds.has(item.id)"
+                  @click.stop="toggleItem(item.id)"
+                >
+                <span class="scope-id">{{ item.id }}</span>
+                <span class="scope-name">{{ item.nameEN }}</span>
+                <span class="scope-md">{{ item.mandays != null ? item.mandays + ' MD' : 'TBD' }}</span>
+                <button
+                  class="scope-expand"
+                  :class="{ open: expandedItems.has(item.id) }"
+                  @click.stop="toggleItemExpand(item.id)"
+                >&#9654;</button>
+              </div>
+
+              <div v-if="expandedItems.has(item.id)" class="scope-detail">
+                <p class="scope-description">{{ item.description }}</p>
+
+                <div v-if="item.softwareApp" class="scope-software">
+                  Requires: {{ item.softwareApp }}
+                </div>
+
+                <div v-if="item.implementationNotice" class="scope-notice">
+                  <div class="scope-notice-label">&#9888; Implementation Notice</div>
+                  {{ item.implementationNotice }}
+                </div>
+
+                <div v-if="item.prerequisites.length" class="scope-prereqs">
+                  <span class="label">Prerequisites:</span>
+                  <button
+                    v-for="pre in item.prerequisites"
+                    :key="pre"
+                    class="prereq-badge"
+                    @click="scrollToItem(pre)"
+                  >{{ pre }}</button>
+                </div>
+
+                <div class="scope-licenses">
+                  <strong>Licenses:</strong>
+                  {{ [item.baseLicense, item.addOnLicense1, item.addOnLicense2].filter(Boolean).join(', ') }}
+                </div>
+
+                <!-- Fiori Apps -->
+                <div v-if="getAppsForItem(item.id).length">
+                  <button class="fiori-toggle" @click="toggleAppsExpand(item.id)">
+                    &#9654; Fiori Apps ({{ getAppsForItem(item.id).length }})
+                  </button>
+                  <table v-if="expandedApps.has(item.id)" class="fiori-apps-table">
+                    <thead>
+                      <tr><th>App Name</th><th>App ID</th><th>Type</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="app in getAppsForItem(item.id)" :key="app.appId + app.appName">
+                        <td>{{ app.appName }}</td>
+                        <td>{{ app.appId }}</td>
+                        <td>{{ app.uiType }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Summary Panel -->
+      <div class="summary-panel">
+        <div class="summary-card">
+          <div class="summary-stats">
+            <div class="stat-box">
+              <div class="stat-value">{{ totalMandays }}</div>
+              <div class="stat-label">Total Mandays</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-value">{{ selectedIds.size }}</div>
+              <div class="stat-label">of {{ allItems.length }} Scope Items</div>
+            </div>
+          </div>
+
+          <!-- Licenses -->
+          <div class="licenses-section" v-if="requiredLicenses.length">
+            <h3>Required Licenses</h3>
+            <div v-for="lic in requiredLicenses" :key="lic" class="license-item">
+              <span class="license-check">&#10003;</span>
+              <span>{{ lic }}</span>
+            </div>
+          </div>
+
+          <!-- Selected Items by Area -->
+          <div class="selected-items-section" v-if="selectedIds.size > 0">
+            <h3>Selected Scope Items</h3>
+            <div
+              v-for="area in solutionAreas"
+              :key="area.name"
+              class="selected-group"
+              v-show="selectedItemsByArea(area.name).length"
+            >
+              <div class="selected-group-header" :style="{ color: area.color }">
+                <span>{{ area.shortName }}</span>
+                <span>{{ mandaysByArea(area.name) }} MD</span>
+              </div>
+              <div
+                v-for="item in selectedItemsByArea(area.name)"
+                :key="item.id"
+                class="selected-group-item"
+              >
+                <span><span class="sid">{{ item.id }}</span> {{ item.nameEN }}</span>
+                <span>{{ item.mandays != null ? item.mandays + ' MD' : 'TBD' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedIds.size === 0" class="empty-state">
+            <div class="empty-state-icon">&#9776;</div>
+            <p>Select scope items to see your configuration summary</p>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <button class="btn btn-primary" @click="exportCSV" :disabled="selectedIds.size === 0">
+              &#8615; Export CSV
+            </button>
+            <button class="btn" @click="printSummary" :disabled="selectedIds.size === 0">
+              &#128438; Print
+            </button>
+            <button class="btn" @click="shareConfig" :disabled="selectedIds.size === 0">
+              &#128279; Share Link
+            </button>
+            <button class="btn btn-danger" @click="resetAll" :disabled="selectedIds.size === 0">
+              &#10005; Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <img src="assets/akquinet-logo.jpeg" alt="akquinet"><br>
+      SAP S/4HANA Cloud Public Edition &mdash; Treasury Configurator &copy; akquinet
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container">
+      <div v-for="(toast, i) in toasts" :key="i" class="toast">{{ toast }}</div>
+    </div>
+  </div>
+
+  <script>
+    const AREA_CONFIG = {
+      'Cash and Liquidity Management': { color: '#2E8B8B', shortName: 'Cash & Liquidity' },
+      'Debt and Investment Management': { color: '#3B5998', shortName: 'Debt & Investment' },
+      'Financial Risk Management': { color: '#7B4FA0', shortName: 'Financial Risk' },
+      'Payments and Bank Communications': { color: '#D4892E', shortName: 'Payments & Bank Comms' }
+    };
+
+    function parseLevel(packageName) {
+      const lower = packageName.toLowerCase();
+      if (lower.includes('optional')) return 'optional';
+      if (lower.includes('advanced')) return 'advanced';
+      return 'basic';
+    }
+
+    // Map the area name to the package prefix for tier matching
+    function getAreaPackagePrefix(areaName) {
+      const map = {
+        'Cash and Liquidity Management': 'Cash Management',
+        'Debt and Investment Management': 'Debt and Investment Management',
+        'Financial Risk Management': 'Financial Risk Management',
+        'Payments and Bank Communications': 'Payments'
+      };
+      return map[areaName] || '';
+    }
+
+    async function loadData() {
+      const response = await fetch('data/treasury-scope-items.xlsx');
+      if (!response.ok) throw new Error('Failed to load Excel file');
+      const buf = await response.arrayBuffer();
+      const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+
+      const sheet1 = wb.Sheets[wb.SheetNames[0]];
+      const sheet2 = wb.Sheets[wb.SheetNames[1]];
+
+      const rawItems = XLSX.utils.sheet_to_json(sheet1);
+      const rawApps = XLSX.utils.sheet_to_json(sheet2);
+
+      const items = rawItems
+        .filter(row => row['Scope Item - ID'] && row['Solution Area'])
+        .map(row => ({
+          id: (row['Scope Item - ID'] || '').toString().trim(),
+          nameEN: (row['Scope Item'] || '').toString().trim(),
+          nameDE: (row['Scope Item - Link'] || '').toString().trim(),
+          baseLicense: (row['Basic Software  License'] || row['Basic Software License'] || '').toString().trim(),
+          addOnLicense1: row['Add-On License 1'] ? row['Add-On License 1'].toString().trim() : null,
+          addOnLicense2: row['Add-On License 2'] ? row['Add-On License 2'].toString().trim() : null,
+          softwareApp: row['Software Application'] ? row['Software Application'].toString().trim() : null,
+          solutionArea: (row['Solution Area'] || '').toString().trim(),
+          implementationNotice: row['Implementation Notice'] ? row['Implementation Notice'].toString().trim().replace(/\r\n/g, ' ').replace(/\r/g, ' ') : null,
+          prerequisites: row['Prerequisite']
+            ? row['Prerequisite'].toString().split(',').map(s => s.trim()).filter(Boolean)
+            : [],
+          package: (row['Package AKQUINET'] || '').toString().trim(),
+          mandays: row['Configuration estimate (MD)'] != null ? Number(row['Configuration estimate (MD)']) : null,
+          description: (row['Scope item description'] || '').toString().trim()
+        }));
+
+      const apps = rawApps.map(row => ({
+        scopeItemId: (row['Scope Item ID'] || '').toString().trim(),
+        appName: (row['App Name'] || '').toString().trim(),
+        appId: (row['App ID'] || '').toString().trim(),
+        uiType: (row['UI Type'] || '').toString().trim()
+      }));
+
+      // Index apps by scope item ID, deduplicated
+      const appsByItem = {};
+      for (const app of apps) {
+        if (!app.scopeItemId || !app.appName) continue;
+        if (!appsByItem[app.scopeItemId]) appsByItem[app.scopeItemId] = [];
+        const existing = appsByItem[app.scopeItemId];
+        if (!existing.some(a => a.appId === app.appId && a.appName === app.appName)) {
+          existing.push(app);
+        }
+      }
+
+      return { items, appsByItem };
+    }
+
+    async function initApp() {
+      const loadingEl = document.getElementById('loading');
+      try {
+        const { items, appsByItem } = await loadData();
+
+        const app = Vue.createApp({
+          data() {
+            return {
+              allItems: items,
+              appsByItem,
+              selectedIds: new Set(),
+              activeArea: Object.keys(AREA_CONFIG)[0],
+              expandedPackages: new Set(),
+              expandedItems: new Set(),
+              expandedApps: new Set(),
+              toasts: []
+            };
+          },
+
+          computed: {
+            solutionAreas() {
+              return Object.entries(AREA_CONFIG).map(([name, cfg]) => ({
+                name,
+                color: cfg.color,
+                shortName: cfg.shortName
+              }));
+            },
+
+            packagesForActiveArea() {
+              const areaItems = this.allItems.filter(i => i.solutionArea === this.activeArea);
+              const groups = {};
+              for (const item of areaItems) {
+                const pkg = item.package || 'Unassigned';
+                if (!groups[pkg]) groups[pkg] = [];
+                groups[pkg].push(item);
+              }
+
+              const levelOrder = { basic: 0, advanced: 1, optional: 2 };
+              return Object.entries(groups)
+                .map(([name, items]) => ({
+                  name,
+                  level: parseLevel(name),
+                  items: items.sort((a, b) => a.nameEN.localeCompare(b.nameEN)),
+                  totalMandays: items.reduce((sum, i) => sum + (i.mandays || 0), 0)
+                }))
+                .sort((a, b) => (levelOrder[a.level] ?? 9) - (levelOrder[b.level] ?? 9));
+            },
+
+            totalMandays() {
+              let total = 0;
+              for (const item of this.allItems) {
+                if (this.selectedIds.has(item.id) && item.mandays != null) {
+                  total += item.mandays;
+                }
+              }
+              return total;
+            },
+
+            requiredLicenses() {
+              const licenses = new Set();
+              for (const item of this.allItems) {
+                if (!this.selectedIds.has(item.id)) continue;
+                if (item.baseLicense) licenses.add(item.baseLicense);
+                if (item.addOnLicense1) licenses.add(item.addOnLicense1);
+                if (item.addOnLicense2) licenses.add(item.addOnLicense2);
+              }
+              // Sort: base license first, then alphabetical
+              const arr = [...licenses];
+              arr.sort((a, b) => {
+                const aBase = a === 'SAP S/4HANA Cloud Public Edition';
+                const bBase = b === 'SAP S/4HANA Cloud Public Edition';
+                if (aBase && !bBase) return -1;
+                if (!aBase && bBase) return 1;
+                return a.localeCompare(b);
+              });
+              return arr;
+            }
+          },
+
+          methods: {
+            countSelectedInArea(areaName) {
+              return this.allItems.filter(i => i.solutionArea === areaName && this.selectedIds.has(i.id)).length;
+            },
+
+            selectedItemsByArea(areaName) {
+              return this.allItems.filter(i => i.solutionArea === areaName && this.selectedIds.has(i.id));
+            },
+
+            mandaysByArea(areaName) {
+              return this.allItems
+                .filter(i => i.solutionArea === areaName && this.selectedIds.has(i.id))
+                .reduce((sum, i) => sum + (i.mandays || 0), 0);
+            },
+
+            getAppsForItem(itemId) {
+              return this.appsByItem[itemId] || [];
+            },
+
+            isPackageFullySelected(pkgName) {
+              const items = this.allItems.filter(i => i.package === pkgName);
+              return items.length > 0 && items.every(i => this.selectedIds.has(i.id));
+            },
+
+            isPackagePartiallySelected(pkgName) {
+              const items = this.allItems.filter(i => i.package === pkgName);
+              const someSelected = items.some(i => this.selectedIds.has(i.id));
+              const allSelected = items.every(i => this.selectedIds.has(i.id));
+              return someSelected && !allSelected;
+            },
+
+            toggleItem(id) {
+              const newSet = new Set(this.selectedIds);
+              if (newSet.has(id)) {
+                // Check if any selected item depends on this
+                const dependents = this.allItems.filter(
+                  i => newSet.has(i.id) && i.prerequisites.includes(id)
+                );
+                if (dependents.length) {
+                  const names = dependents.map(d => d.nameEN).join(', ');
+                  if (!confirm(`Deselecting this will also deselect: ${names}. Continue?`)) return;
+                  for (const dep of dependents) newSet.delete(dep.id);
+                }
+                newSet.delete(id);
+              } else {
+                newSet.add(id);
+                // Auto-select prerequisites
+                const item = this.allItems.find(i => i.id === id);
+                if (item) {
+                  for (const preId of item.prerequisites) {
+                    if (!newSet.has(preId)) {
+                      newSet.add(preId);
+                      const preItem = this.allItems.find(i => i.id === preId);
+                      this.showToast(`Auto-selected prerequisite: ${preItem ? preItem.nameEN : preId} (${preId})`);
+                    }
+                  }
+                }
+              }
+              this.selectedIds = newSet;
+              this.updateHash();
+            },
+
+            togglePackage(pkgName) {
+              const items = this.allItems.filter(i => i.package === pkgName);
+              const allSelected = items.every(i => this.selectedIds.has(i.id));
+              const newSet = new Set(this.selectedIds);
+
+              if (allSelected) {
+                for (const item of items) {
+                  const dependents = this.allItems.filter(
+                    i => newSet.has(i.id) && i.package !== pkgName && i.prerequisites.includes(item.id)
+                  );
+                  if (dependents.length === 0) {
+                    newSet.delete(item.id);
+                  }
+                }
+              } else {
+                for (const item of items) {
+                  newSet.add(item.id);
+                  // Auto-select prerequisites
+                  for (const preId of item.prerequisites) {
+                    if (!newSet.has(preId)) {
+                      newSet.add(preId);
+                      const preItem = this.allItems.find(i => i.id === preId);
+                      this.showToast(`Auto-selected prerequisite: ${preItem ? preItem.nameEN : preId} (${preId})`);
+                    }
+                  }
+                }
+              }
+              this.selectedIds = newSet;
+              this.updateHash();
+            },
+
+            getActiveTier(areaName) {
+              const areaItems = this.allItems.filter(i => i.solutionArea === areaName);
+              const selectedAreaItems = areaItems.filter(i => this.selectedIds.has(i.id));
+              if (selectedAreaItems.length === 0) return 'None';
+              if (selectedAreaItems.length === areaItems.length) return 'All';
+
+              const basicPkgs = areaItems.filter(i => parseLevel(i.package) === 'basic');
+              const advancedPkgs = areaItems.filter(i => parseLevel(i.package) === 'advanced');
+
+              const allBasicSelected = basicPkgs.length > 0 && basicPkgs.every(i => this.selectedIds.has(i.id));
+              const allAdvancedSelected = advancedPkgs.length > 0 && advancedPkgs.every(i => this.selectedIds.has(i.id));
+              const anyOptionalSelected = areaItems.some(i => parseLevel(i.package) === 'optional' && this.selectedIds.has(i.id));
+
+              if (allBasicSelected && allAdvancedSelected && !anyOptionalSelected) return 'Advanced';
+              if (allBasicSelected && !allAdvancedSelected && !anyOptionalSelected) return 'Basic';
+              return '';
+            },
+
+            selectTier(areaName, tier) {
+              const areaItems = this.allItems.filter(i => i.solutionArea === areaName);
+              const newSet = new Set(this.selectedIds);
+
+              // First remove all items from this area
+              for (const item of areaItems) newSet.delete(item.id);
+
+              if (tier === 'Basic') {
+                for (const item of areaItems) {
+                  if (parseLevel(item.package) === 'basic') newSet.add(item.id);
+                }
+              } else if (tier === 'Advanced') {
+                for (const item of areaItems) {
+                  if (parseLevel(item.package) === 'basic' || parseLevel(item.package) === 'advanced') {
+                    newSet.add(item.id);
+                  }
+                }
+              } else if (tier === 'All') {
+                for (const item of areaItems) newSet.add(item.id);
+              }
+
+              // Auto-select prerequisites for newly added items
+              for (const item of areaItems) {
+                if (newSet.has(item.id)) {
+                  for (const preId of item.prerequisites) {
+                    if (!newSet.has(preId)) {
+                      newSet.add(preId);
+                      const preItem = this.allItems.find(i => i.id === preId);
+                      this.showToast(`Auto-selected prerequisite: ${preItem ? preItem.nameEN : preId} (${preId})`);
+                    }
+                  }
+                }
+              }
+
+              this.selectedIds = newSet;
+              this.updateHash();
+            },
+
+            togglePackageExpand(pkgName) {
+              const newSet = new Set(this.expandedPackages);
+              if (newSet.has(pkgName)) newSet.delete(pkgName);
+              else newSet.add(pkgName);
+              this.expandedPackages = newSet;
+            },
+
+            toggleItemExpand(itemId) {
+              const newSet = new Set(this.expandedItems);
+              if (newSet.has(itemId)) newSet.delete(itemId);
+              else newSet.add(itemId);
+              this.expandedItems = newSet;
+            },
+
+            toggleAppsExpand(itemId) {
+              const newSet = new Set(this.expandedApps);
+              if (newSet.has(itemId)) newSet.delete(itemId);
+              else newSet.add(itemId);
+              this.expandedApps = newSet;
+            },
+
+            scrollToItem(itemId) {
+              // Find which area/package this item belongs to
+              const item = this.allItems.find(i => i.id === itemId);
+              if (!item) return;
+              this.activeArea = item.solutionArea;
+              this.$nextTick(() => {
+                // Expand the package
+                const newPkgs = new Set(this.expandedPackages);
+                newPkgs.add(item.package);
+                this.expandedPackages = newPkgs;
+                this.$nextTick(() => {
+                  const el = document.querySelector(`[data-item-id="${itemId}"]`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.style.transition = 'background 0.3s';
+                    el.style.background = '#E8D5F0';
+                    setTimeout(() => { el.style.background = ''; }, 1500);
+                  }
+                });
+              });
+            },
+
+            showToast(msg) {
+              this.toasts.push(msg);
+              setTimeout(() => { this.toasts.shift(); }, 3000);
+            },
+
+            updateHash() {
+              const ids = [...this.selectedIds].sort().join(',');
+              history.replaceState(null, '', ids ? `#selected=${ids}` : location.pathname);
+            },
+
+            loadFromHash() {
+              const hash = location.hash;
+              if (!hash.startsWith('#selected=')) return;
+              const ids = hash.replace('#selected=', '').split(',').filter(Boolean);
+              const validIds = new Set(this.allItems.map(i => i.id));
+              const newSet = new Set();
+              for (const id of ids) {
+                if (validIds.has(id)) newSet.add(id);
+              }
+              this.selectedIds = newSet;
+            },
+
+            resetAll() {
+              if (!confirm('Reset all selections?')) return;
+              this.selectedIds = new Set();
+              this.updateHash();
+            },
+
+            exportCSV() {
+              const selected = this.allItems.filter(i => this.selectedIds.has(i.id));
+              const headers = ['Scope Item ID', 'Scope Item', 'Solution Area', 'Package', 'Mandays', 'Licenses', 'Description'];
+              const rows = selected.map(i => [
+                i.id,
+                `"${i.nameEN.replace(/"/g, '""')}"`,
+                `"${i.solutionArea}"`,
+                `"${i.package}"`,
+                i.mandays != null ? i.mandays : 'TBD',
+                `"${[i.baseLicense, i.addOnLicense1, i.addOnLicense2].filter(Boolean).join('; ')}"`,
+                `"${i.description.replace(/"/g, '""')}"`
+              ]);
+
+              const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+              const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'treasury-configuration.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            },
+
+            printSummary() {
+              window.print();
+            },
+
+            shareConfig() {
+              const url = location.href;
+              navigator.clipboard.writeText(url).then(() => {
+                this.showToast('Configuration link copied to clipboard!');
+              }).catch(() => {
+                prompt('Copy this link to share your configuration:', url);
+              });
+            }
+          },
+
+          mounted() {
+            this.loadFromHash();
+            window.addEventListener('hashchange', () => this.loadFromHash());
+            // Auto-expand first package of each area for better UX
+            if (this.packagesForActiveArea.length) {
+              this.expandedPackages = new Set([this.packagesForActiveArea[0].name]);
+            }
+          },
+
+          watch: {
+            activeArea() {
+              // Auto-expand first package when switching tabs
+              if (this.packagesForActiveArea.length) {
+                this.expandedPackages = new Set([this.packagesForActiveArea[0].name]);
+              }
+            }
+          }
+        });
+
+        app.mount('#app');
+        document.getElementById('app').style.display = '';
+        loadingEl.classList.add('fade-out');
+        setTimeout(() => loadingEl.remove(), 400);
+
+      } catch (err) {
+        loadingEl.innerHTML = `
+          <img src="assets/akquinet-logo.jpeg" alt="akquinet" style="height:48px;margin-bottom:24px">
+          <div class="loading-error">
+            <h3>Failed to load configurator</h3>
+            <p style="margin-top:8px">${err.message}</p>
+            <p style="margin-top:12px;font-size:12px">Ensure the Excel file is at <code>data/treasury-scope-items.xlsx</code></p>
+          </div>
+        `;
+      }
+    }
+
+    initApp();
+  </script>
+</body>
+</html>
