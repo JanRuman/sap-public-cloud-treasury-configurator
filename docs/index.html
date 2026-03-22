@@ -339,6 +339,26 @@
     }
     .scope-licenses strong { color: var(--text); }
 
+    .signavio-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 10px;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: all 0.2s;
+      margin-bottom: 10px;
+    }
+    .signavio-link:hover {
+      color: var(--primary);
+      border-color: var(--primary);
+    }
+
     /* Fiori Apps */
     .fiori-toggle {
       font-size: 13px;
@@ -716,6 +736,13 @@
                   {{ [item.baseLicense, item.addOnLicense1, item.addOnLicense2, item.softwareApp].filter(Boolean).join(', ') }}
                 </div>
 
+                <a
+                  class="signavio-link"
+                  :href="'https://me.sap.com/processnavigator/SolS/SOL_PUBLIC_CLOUD-1/ScopeItems/' + item.id"
+                  target="_blank"
+                  @click.stop
+                >&#8599; Open - SAP Signavio Process Navigator</a>
+
                 <!-- Fiori Apps -->
                 <div v-if="getAppsForItem(item.id).length">
                   <button class="fiori-toggle" @click="toggleAppsExpand(item.id)">
@@ -850,7 +877,7 @@
     }
 
     async function loadData() {
-      const response = await fetch('data/treasury-scope-items.xlsx');
+      const response = await fetch('data/treasury-scope-items.xlsx?v=' + Date.now());
       if (!response.ok) throw new Error('Failed to load Excel file');
       const buf = await response.arrayBuffer();
       const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
