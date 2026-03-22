@@ -6,6 +6,7 @@
   <title>SAP Treasury Configurator | akquinet</title>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <style>
     :root {
       --text: #5A5A5A;
@@ -455,6 +456,17 @@
       display: flex;
       justify-content: space-between;
       color: var(--text);
+      gap: 8px;
+    }
+    .selected-group-item > span:first-child {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .selected-group-item > span:last-child {
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .selected-group-item .sid {
       font-family: "Consolas", monospace;
@@ -565,19 +577,9 @@
       .scope-detail { padding-left: 36px; }
     }
 
-    /* Print */
+    /* Print - minimal for browser print */
     @media print {
-      .header, .area-tabs, .tier-select, .action-buttons,
-      .toast-container, .footer, .scope-expand, .fiori-toggle,
-      .package-chevron, .custom-check, .pkg-checkbox { display: none !important; }
-      .main { display: block; }
-      .summary-panel { position: static; page-break-after: always; }
-      .config-panel .scope-items { display: block !important; }
-      .scope-item.selected { background: #F5F0F7; }
-      .scope-item:not(.selected) { display: none; }
-      .package-card { box-shadow: none; border: 1px solid #ccc; }
-      body { background: #fff; }
-      @page { margin: 1.5cm; }
+      .toast-container { display: none !important; }
     }
 
     /* Empty state */
@@ -631,9 +633,9 @@
 
         <!-- Tier Quick Select -->
         <div class="tier-select">
-          <span>Quick select:</span>
+          <span>AKQUINET Package:</span>
           <button
-            v-for="tier in ['None', 'Basic', 'Advanced', 'All']"
+            v-for="tier in ['None', 'Basic', 'Advanced']"
             :key="tier"
             class="tier-btn"
             :class="{ active: getActiveTier(activeArea) === tier }"
@@ -705,7 +707,7 @@
 
                 <div class="scope-licenses">
                   <strong>Licenses:</strong>
-                  {{ [item.baseLicense, item.addOnLicense1, item.addOnLicense2].filter(Boolean).join(', ') }}
+                  {{ [item.baseLicense, item.addOnLicense1, item.addOnLicense2, item.softwareApp].filter(Boolean).join(', ') }}
                 </div>
 
                 <!-- Fiori Apps -->
@@ -786,11 +788,11 @@
 
           <!-- Action Buttons -->
           <div class="action-buttons">
-            <button class="btn btn-primary" @click="exportCSV" :disabled="selectedIds.size === 0">
-              &#8615; Export CSV
+            <button class="btn btn-primary" @click="exportExcel" :disabled="selectedIds.size === 0">
+              &#8615; Export Excel
             </button>
-            <button class="btn" @click="printSummary" :disabled="selectedIds.size === 0">
-              &#128438; Print
+            <button class="btn" @click="exportPDF" :disabled="selectedIds.size === 0">
+              &#128196; Export PDF
             </button>
             <button class="btn" @click="shareConfig" :disabled="selectedIds.size === 0">
               &#128279; Share Link
@@ -818,9 +820,9 @@
   <script>
     const AREA_CONFIG = {
       'Cash and Liquidity Management': { color: '#2E8B8B', shortName: 'Cash & Liquidity' },
+      'Payments and Bank Communications': { color: '#D4892E', shortName: 'Payments & Bank Comms' },
       'Debt and Investment Management': { color: '#3B5998', shortName: 'Debt & Investment' },
-      'Financial Risk Management': { color: '#7B4FA0', shortName: 'Financial Risk' },
-      'Payments and Bank Communications': { color: '#D4892E', shortName: 'Payments & Bank Comms' }
+      'Financial Risk Management': { color: '#7B4FA0', shortName: 'Financial Risk' }
     };
 
     function parseLevel(packageName) {
@@ -959,6 +961,7 @@
                 if (item.baseLicense) licenses.add(item.baseLicense);
                 if (item.addOnLicense1) licenses.add(item.addOnLicense1);
                 if (item.addOnLicense2) licenses.add(item.addOnLicense2);
+                if (item.softwareApp) licenses.add(item.softwareApp);
               }
               // Sort: base license first, then alphabetical
               const arr = [...licenses];
@@ -1070,7 +1073,6 @@
               const areaItems = this.allItems.filter(i => i.solutionArea === areaName);
               const selectedAreaItems = areaItems.filter(i => this.selectedIds.has(i.id));
               if (selectedAreaItems.length === 0) return 'None';
-              if (selectedAreaItems.length === areaItems.length) return 'All';
 
               const basicPkgs = areaItems.filter(i => parseLevel(i.package) === 'basic');
               const advancedPkgs = areaItems.filter(i => parseLevel(i.package) === 'advanced');
@@ -1101,9 +1103,7 @@
                     newSet.add(item.id);
                   }
                 }
-              } else if (tier === 'All') {
-                for (const item of areaItems) newSet.add(item.id);
-              }
+                }
 
               // Auto-select prerequisites for newly added items
               for (const item of areaItems) {
@@ -1193,31 +1193,210 @@
               this.updateHash();
             },
 
-            exportCSV() {
+            exportExcel() {
               const selected = this.allItems.filter(i => this.selectedIds.has(i.id));
-              const headers = ['Scope Item ID', 'Scope Item', 'Solution Area', 'Package', 'Mandays', 'Licenses', 'Description'];
-              const rows = selected.map(i => [
-                i.id,
-                `"${i.nameEN.replace(/"/g, '""')}"`,
-                `"${i.solutionArea}"`,
-                `"${i.package}"`,
-                i.mandays != null ? i.mandays : 'TBD',
-                `"${[i.baseLicense, i.addOnLicense1, i.addOnLicense2].filter(Boolean).join('; ')}"`,
-                `"${i.description.replace(/"/g, '""')}"`
-              ]);
+              const wsData = [
+                ['Scope Item ID', 'Scope Item', 'Solution Area', 'Package', 'Mandays', 'Base License', 'Add-On License 1', 'Add-On License 2', 'Software Application', 'Description']
+              ];
+              for (const i of selected) {
+                wsData.push([
+                  i.id, i.nameEN, i.solutionArea, i.package,
+                  i.mandays != null ? i.mandays : '',
+                  i.baseLicense || '', i.addOnLicense1 || '', i.addOnLicense2 || '',
+                  i.softwareApp || '', i.description
+                ]);
+              }
+              // Summary row
+              wsData.push([]);
+              wsData.push(['', '', '', 'TOTAL', this.totalMandays]);
 
-              const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-              const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = 'treasury-configuration.csv';
-              a.click();
-              URL.revokeObjectURL(url);
+              const wb = XLSX.utils.book_new();
+              const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+              // Set column widths
+              ws['!cols'] = [
+                {wch: 12}, {wch: 45}, {wch: 30}, {wch: 35}, {wch: 10},
+                {wch: 35}, {wch: 40}, {wch: 40}, {wch: 30}, {wch: 60}
+              ];
+
+              XLSX.utils.book_append_sheet(wb, ws, 'Treasury Configuration');
+
+              // Licenses sheet
+              const licData = [['Required Licenses']];
+              for (const lic of this.requiredLicenses) licData.push([lic]);
+              const ws2 = XLSX.utils.aoa_to_sheet(licData);
+              ws2['!cols'] = [{wch: 60}];
+              XLSX.utils.book_append_sheet(wb, ws2, 'Required Licenses');
+
+              XLSX.writeFile(wb, 'treasury-configuration.xlsx');
             },
 
-            printSummary() {
-              window.print();
+            exportPDF() {
+              const { jsPDF } = window.jspdf;
+              const doc = new jsPDF('p', 'mm', 'a4');
+              const pageW = doc.internal.pageSize.getWidth();
+              const pageH = doc.internal.pageSize.getHeight();
+              const margin = 15;
+              const contentW = pageW - margin * 2;
+              let y = margin;
+
+              const primary = [196, 70, 126];
+              const textDark = [58, 58, 58];
+              const muted = [136, 136, 136];
+              const areaColors = {
+                'Cash and Liquidity Management': [46, 139, 139],
+                'Payments and Bank Communications': [212, 137, 46],
+                'Debt and Investment Management': [59, 89, 152],
+                'Financial Risk Management': [123, 79, 160]
+              };
+
+              const checkPageBreak = (needed) => {
+                if (y + needed > pageH - 20) {
+                  addFooter();
+                  doc.addPage();
+                  y = margin;
+                }
+              };
+
+              const addFooter = () => {
+                doc.setDrawColor(...primary);
+                doc.setLineWidth(0.5);
+                doc.line(margin, pageH - 12, pageW - margin, pageH - 12);
+                doc.setTextColor(...muted);
+                doc.setFontSize(7);
+                doc.setFont('helvetica', 'normal');
+                doc.text('akquinet  |  SAP S/4HANA Cloud Public Edition  |  Treasury Configurator', pageW / 2, pageH - 7, { align: 'center' });
+              };
+
+              // Header bar
+              doc.setFillColor(...primary);
+              doc.rect(0, 0, pageW, 28, 'F');
+              doc.setTextColor(255, 255, 255);
+              doc.setFontSize(16);
+              doc.setFont('helvetica', 'bold');
+              doc.text('SAP S/4HANA Cloud Public Edition', margin, 12);
+              doc.setFontSize(11);
+              doc.setFont('helvetica', 'normal');
+              doc.text('Treasury Configuration Summary', margin, 20);
+              doc.setFontSize(9);
+              doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageW - margin, 20, { align: 'right' });
+
+              y = 36;
+
+              // Summary stat boxes
+              const boxW = contentW / 2 - 3;
+              doc.setFillColor(247, 245, 248);
+              doc.roundedRect(margin, y, boxW, 22, 3, 3, 'F');
+              doc.roundedRect(margin + boxW + 6, y, boxW, 22, 3, 3, 'F');
+
+              doc.setTextColor(...primary);
+              doc.setFontSize(22);
+              doc.setFont('helvetica', 'bold');
+              doc.text(String(this.totalMandays), margin + boxW / 2, y + 12, { align: 'center' });
+              doc.text(String(this.selectedIds.size), margin + boxW + 6 + boxW / 2, y + 12, { align: 'center' });
+
+              doc.setTextColor(...muted);
+              doc.setFontSize(8);
+              doc.setFont('helvetica', 'normal');
+              doc.text('Total Mandays', margin + boxW / 2, y + 18, { align: 'center' });
+              doc.text('Scope Items Selected', margin + boxW + 6 + boxW / 2, y + 18, { align: 'center' });
+              y += 30;
+
+              // Required Licenses
+              doc.setTextColor(...textDark);
+              doc.setFontSize(11);
+              doc.setFont('helvetica', 'bold');
+              doc.text('Required Licenses', margin, y);
+              y += 7;
+              doc.setFontSize(9);
+              doc.setFont('helvetica', 'normal');
+              for (const lic of this.requiredLicenses) {
+                doc.setFillColor(76, 175, 80);
+                doc.circle(margin + 3, y - 1.2, 1.5, 'F');
+                doc.setTextColor(...textDark);
+                doc.text(lic, margin + 8, y);
+                y += 5;
+              }
+              y += 8;
+
+              // Table drawing helper
+              const colWidths = [16, 68, 60, 18]; // ID, Name, Package, MD
+              const drawTableRow = (cols, isHeader, isAlt) => {
+                const rowH = 7;
+                checkPageBreak(rowH + 2);
+                if (isHeader) {
+                  doc.setFillColor(240, 237, 242);
+                  doc.rect(margin, y - 4.5, contentW, rowH, 'F');
+                  doc.setFont('helvetica', 'bold');
+                  doc.setFontSize(8);
+                  doc.setTextColor(...textDark);
+                } else {
+                  if (isAlt) {
+                    doc.setFillColor(250, 248, 252);
+                    doc.rect(margin, y - 4.5, contentW, rowH, 'F');
+                  }
+                  doc.setFont('helvetica', 'normal');
+                  doc.setFontSize(8);
+                  doc.setTextColor(...textDark);
+                }
+                let x = margin + 2;
+                for (let c = 0; c < cols.length; c++) {
+                  const text = String(cols[c] || '');
+                  if (c === 0) doc.setFont('courier', isHeader ? 'bold' : 'normal');
+                  else doc.setFont('helvetica', isHeader ? 'bold' : 'normal');
+                  if (c === cols.length - 1) {
+                    doc.text(text, margin + contentW - 2, y, { align: 'right' });
+                  } else {
+                    const maxW = colWidths[c] - 2;
+                    const truncated = doc.getStringUnitWidth(text) * 8 / doc.internal.scaleFactor > maxW
+                      ? text.substring(0, Math.floor(maxW / 1.8)) + '...'
+                      : text;
+                    doc.text(truncated, x, y);
+                  }
+                  x += colWidths[c];
+                }
+                y += rowH;
+              };
+
+              // Selected items by area
+              for (const areaName of Object.keys(AREA_CONFIG)) {
+                const areaItems = this.allItems.filter(i => i.solutionArea === areaName && this.selectedIds.has(i.id));
+                if (areaItems.length === 0) continue;
+
+                const areaColor = areaColors[areaName] || textDark;
+                const areaMD = areaItems.reduce((s, i) => s + (i.mandays || 0), 0);
+                const cfg = AREA_CONFIG[areaName];
+
+                checkPageBreak(25);
+
+                // Area header bar
+                doc.setFillColor(...areaColor);
+                doc.roundedRect(margin, y - 1, contentW, 9, 2, 2, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
+                doc.text(cfg.shortName, margin + 4, y + 5);
+                doc.text(areaMD + ' MD', pageW - margin - 4, y + 5, { align: 'right' });
+                y += 14;
+
+                // Table header
+                drawTableRow(['ID', 'Scope Item', 'Package', 'Effort'], true, false);
+
+                // Table rows
+                areaItems.forEach((item, idx) => {
+                  drawTableRow([
+                    item.id,
+                    item.nameEN,
+                    item.package,
+                    item.mandays != null ? item.mandays + ' MD' : 'TBD'
+                  ], false, idx % 2 === 1);
+                });
+
+                y += 6;
+              }
+
+              addFooter();
+              doc.save('treasury-configuration.pdf');
             },
 
             shareConfig() {
