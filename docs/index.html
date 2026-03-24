@@ -672,7 +672,7 @@
                   @click.stop="toggleItem(item.id)"
                 >
                 <span class="scope-name">{{ item.nameEN }}</span>
-                <span v-if="item.nameEN.toLowerCase().includes('integration')" class="package-level level-integration" style="font-size:9px;padding:1px 6px;">INTEGRATION</span>
+                <span v-if="item.package.toLowerCase().includes('integration')" class="package-level level-integration" style="font-size:9px;padding:1px 6px;">INTEGRATION</span>
                 <span class="scope-id">{{ item.id }}</span>
                 <span class="scope-md">{{ item.mandays != null ? item.mandays + ' MD' : 'TBD' }}</span>
                 <button
